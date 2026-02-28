@@ -69,7 +69,7 @@ $hdoMap = @{}
 foreach ($line in $rawHdo[1..7]) {
     $parts = $line -split ';'
     $intervals = @()
-    for ($i = 1; $i -lt 14; $i += 2) {
+    for ($i = 1; $i -lt 4; $i += 2) {
         if (-not [string]::IsNullOrWhiteSpace($parts[$i]) -and ($parts[$i] -ne $parts[$i+1])) {
             $end = if ($parts[$i+1] -match "00:00|0:00") { [timespan]"1.00:00:00" } else { [timespan]$parts[$i+1] }
             $intervals += @{ start = [timespan]$parts[$i]; end = $end }
