@@ -3,21 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ceny Elektřiny Dashboard</title>
+    <title>Ceny Elektřiny - Chalupa</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #121212; color: white; padding: 10px; margin: 0; }
-        .container { max-width: 1000px; margin: auto; padding-bottom: 50px; }
+        .container { max-width: 800px; margin: auto; padding-bottom: 50px; }
         h1 { text-align: center; color: #00e676; font-size: 1.5em; margin: 20px 0; }
         
-        /* Horní karty */
-        .stats { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
-        .card { background: #1e1e1e; padding: 12px; border-radius: 8px; text-align: center; flex: 1; border: 1px solid #333; }
+        .stats { display: flex; justify-content: center; margin-bottom: 20px; }
+        .card { background: #1e1e1e; padding: 15px; border-radius: 12px; text-align: center; width: 100%; max-width: 250px; border: 2px solid #00e676; }
         .card h3 { margin: 0; color: #aaa; font-size: 0.8em; text-transform: uppercase; }
-        .card p { font-size: 1.2em; font-weight: bold; margin: 8px 0 0 0; color: #fff; }
+        .card p { font-size: 1.8em; font-weight: bold; margin: 8px 0 0 0; color: #fff; }
 
-        /* Kontejner pro graf */
         .chart-container {
             position: relative;
             background: #1e1e1e;
@@ -25,18 +23,13 @@
             padding: 10px;
             margin-bottom: 30px;
             border: 1px solid #333;
-            height: 40vh; /* Výška na PC */
+            height: 40vh;
         }
 
-        /* Mobilní verze: Graf bude vysoký (cca 2/3 obrazovky) */
         @media (max-width: 600px) {
-            .chart-container { height: 70vh; }
-            .stats { flex-direction: column; }
-            .card { width: 100%; box-sizing: border-box; }
+            .chart-container { height: 65vh; }
         }
 
-        /* Tabulka */
-        h2 { color: #00e676; font-size: 1.2em; margin-top: 30px; }
         .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #333; }
         table { width: 100%; border-collapse: collapse; background: #1e1e1e; font-size: 0.9em; }
         th, td { padding: 12px 8px; text-align: center; border-bottom: 1px solid #333; }
@@ -46,27 +39,23 @@
 </head>
 <body>
     <div class="container">
-        <h1>Ceny Elektřiny (EUR/MWh)</h1>
+        <h1>Ceny Elektřiny - Chalupa</h1>
         
         <div class="stats">
-            <div class="card"><h3>Aktuální</h3><p id="curr">-</p></div>
-            <div class="card"><h3>Baterie</h3><p id="bat">-</p></div>
-            <div class="card"><h3>Výkup</h3><p id="sell">-</p></div>
+            <div class="card"><h3>Aktuální Cena</h3><p id="curr">-</p></div>
         </div>
 
         <div class="chart-container">
             <canvas id="priceChart"></canvas>
         </div>
 
-        <h2>Předpověď cen</h2>
+        <h2>Předpověď (Konečná cena)</h2>
         <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
                         <th>Čas</th>
-                        <th>Konečná</th>
-                        <th>Baterie</th>
-                        <th>Výkup</th>
+                        <th>Konečná cena</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -87,7 +76,6 @@
                 
                 const filteredData = allData.filter(r => {
                     const rowTime = new Date(`${r.Datum}T${r.Cas}`);
-                    // Zobrazujeme od aktuálního 5min intervalu
                     return rowTime >= new Date(now.getTime() - 5 * 60000);
                 });
 
@@ -95,57 +83,41 @@
 
                 const labels = filteredData.map(r => r.Cas);
                 const konecna = filteredData.map(r => parseFloat(r.Cena_Konecna.replace(',', '.')));
-                const bat = filteredData.map(r => parseFloat(r.Cena_Bat.replace(',', '.')));
-                const sell = filteredData.map(r => parseFloat(r.Sell.replace(',', '.')));
 
-                // Horní karty
                 document.getElementById('curr').innerText = konecna[0].toFixed(2) + " €";
-                document.getElementById('bat').innerText = bat[0].toFixed(2) + " €";
-                document.getElementById('sell').innerText = sell[0].toFixed(2) + " €";
 
-                // Tabulka (bez datumu)
                 const tableBody = document.getElementById('tableBody');
                 filteredData.forEach((r, index) => {
                     const row = document.createElement('tr');
                     if (index === 0) row.className = 'current-row';
-                    
-                    row.innerHTML = `
-                        <td>${r.Cas}</td>
-                        <td>${konecna[index].toFixed(2)} €</td>
-                        <td>${bat[index].toFixed(2)} €</td>
-                        <td>${sell[index].toFixed(2)} €</td>
-                    `;
+                    row.innerHTML = `<td>${r.Cas}</td><td>${konecna[index].toFixed(2)} €</td>`;
                     tableBody.appendChild(row);
                 });
 
-                // Graf
                 new Chart(document.getElementById('priceChart'), {
                     type: 'line',
                     data: {
                         labels: labels,
-                        datasets: [
-                            { label: 'Konečná', data: konecna, borderColor: '#00e676', backgroundColor: '#00e676', borderWidth: 3, pointRadius: 0, tension: 0.1 },
-                            { label: 'Baterie', data: bat, borderColor: '#ff9800', borderDash: [5, 5], pointRadius: 0, tension: 0.1 },
-                            { label: 'Výkup', data: sell, borderColor: '#2196f3', backgroundColor: 'rgba(33, 150, 243, 0.1)', fill: true, pointRadius: 0, tension: 0.1 }
-                        ]
+                        datasets: [{ 
+                            label: 'Konečná', 
+                            data: konecna, 
+                            borderColor: '#00e676', 
+                            backgroundColor: 'rgba(0, 230, 118, 0.1)', 
+                            fill: true,
+                            borderWidth: 3, 
+                            pointRadius: 0, 
+                            tension: 0.1 
+                        }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         interaction: { intersect: false, mode: 'index' },
                         scales: { 
-                            x: { 
-                                grid: { display: false },
-                                ticks: { color: '#888', autoSkip: true, maxTicksLimit: 10 }
-                            }, 
-                            y: { 
-                                grid: { color: '#333' },
-                                ticks: { color: '#888' }
-                            } 
+                            x: { grid: { display: false }, ticks: { color: '#888', autoSkip: true, maxTicksLimit: 10 } }, 
+                            y: { grid: { color: '#333' }, ticks: { color: '#888' } } 
                         },
-                        plugins: { 
-                            legend: { position: 'top', labels: { color: 'white', boxWidth: 12 } } 
-                        }
+                        plugins: { legend: { display: false } }
                     }
                 });
             }
