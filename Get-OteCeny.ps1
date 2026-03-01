@@ -1,75 +1,56 @@
 # Nastavení kódování
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Cesta k souboru (univerzální pro GitHub i PC)
 $hdoFile = Join-Path $PSScriptRoot "hdo500.csv"
 $outputFile = Join-Path $PSScriptRoot "ceny_final_5min.csv"
 
-Write-Host "--- SPUŠTĚNÍ AUTOMATIZACE (GitHub Actions) ---"
+Write-Host "--- SPUŠTĚNÍ AUTOMATIZACE (CHALUPA - CZK/kWh) ---"
 
-# Kontrola, zda soubor existuje, než začneme
-if (-not (Test-Path $hdoFile)) {
-    Write-Error "Soubor $hdoFile nebyl nalezen v repozitáři!"
-    exit 1
-}
-# --- 1. AKTUALIZACE EUR A PŘEPOČET ---
+if (-not (Test-Path $hdoFile)) { Write-Error "Soubor $hdoFile nebyl nalezen!"; exit 1 }
+
+# --- 1. AKTUALIZACE EUR ---
 try {
-    $cnbUrl = "https://www.cnb.cz/cs/financni_trhy/devizovy_trh/kurzy_devizoveho_trhu/denni_kurz.txt"
+    $cnbUrl = "https://www.cnb.cz/cs/financni_trhy/devizovy-trh/kurzy_devizoveho_trhu/denni_kurz.txt"
     $cnbContent = Invoke-WebRequest -Uri $cnbUrl -UseBasicParsing
     $eurLine = $cnbContent.Content -split "`n" | Select-String "EUR"
     $eurRateStr = $eurLine.ToString().Split("|")[4]
     $eurRateNum = [double]($eurRateStr -replace ',', '.')
     
     $hdoLinesAll = Get-Content -Path $hdoFile -Encoding UTF8
-    
-    function Get-ConvertedValue($fromLineIndex, $label, $rate) {
-        $parts = $hdoLinesAll[$fromLineIndex] -split ';'
-        $czkVal = [double]($parts[1] -replace ',', '.')
-        $eurVal = $czkVal / $rate
-        return "$label;$("{0:N4}" -f $eurVal)"
-    }
-
-    $hdoLinesAll[10] = Get-ConvertedValue 21 "T1" $eurRateNum
-    $hdoLinesAll[11] = Get-ConvertedValue 22 "T2" $eurRateNum
-    $hdoLinesAll[12] = Get-ConvertedValue 23 "baterie" $eurRateNum
-    $hdoLinesAll[14] = Get-ConvertedValue 24 "priplatek" $eurRateNum
-    $hdoLinesAll[15] = Get-ConvertedValue 25 "srazka" $eurRateNum
-    $hdoLinesAll[17] = "EUR;$eurRateStr"
-
+    $hdoLinesAll[17] = "EUR;$eurRateStr" # Uložíme aktuální kurz do CSV
     $hdoLinesAll | Set-Content -Path $hdoFile -Encoding UTF8
-    Write-Host "Kurz EUR aktualizován: $eurRateStr"
-    $rawHdo = Get-Content -Path $hdoFile -Encoding UTF8
-} catch { Write-Host "Chyba ČNB: $($_.Exception.Message)" }
+    Write-Host "Aktuální kurz ČNB: $eurRateNum CZK/EUR"
+} catch { 
+    $eurRateNum = 25.0 # Záložní kurz, pokud ČNB nejede
+    Write-Host "Chyba ČNB, použit záložní kurz." 
+}
 
-# --- 2. NAČTENÍ KONSTANT A VÝPOČET ---
+$rawHdo = Get-Content -Path $hdoFile -Encoding UTF8
+
+# Pomocná funkce pro načtení hodnot z CSV (předpokládáme, že v CSV jsou hodnoty v CZK)
 function Get-HdoValue($lineIndex) {
-    # Znovu se ujistíme, že máme data v $rawHdo
-    if ($null -eq $rawHdo -or $rawHdo.Count -le $lineIndex) {
-        Write-Host "Varování: Řádek $lineIndex v souboru chybí nebo je soubor prázdný." -ForegroundColor Yellow
-        return 0
-    }
-    
+    if ($null -eq $rawHdo -or $rawHdo.Count -le $lineIndex) { return 0 }
     $parts = $rawHdo[$lineIndex] -split ';'
     if ($parts.Count -gt 1) { 
-        # Vyčištění od případných uvozovek a převod na číslo
         $val = $parts[1].Trim().Replace('"', '') -replace ',', '.'
         return [double]$val
     }
     return 0
 }
 
-$T1 = Get-HdoValue 10
-$T2 = Get-HdoValue 11
-$baterie = Get-HdoValue 12
-$batProc = Get-HdoValue 13
-$Priplatek = Get-HdoValue 14
-$srazka = Get-HdoValue 15
+# Načtení poplatků (předpokládám, že T1CZK, T2CZK atd. jsou v CZK za MWh)
+$T1_czk_mwh = Get-HdoValue 21
+$T2_czk_mwh = Get-HdoValue 22
+$Priplatek_czk_mwh = Get-HdoValue 24
+$srazka_czk_mwh = Get-HdoValue 25
 
+# --- 2. LOGIKA HDO MAPY ---
 $hdoMap = @{}
 foreach ($line in $rawHdo[1..7]) {
     $parts = $line -split ';'
     $intervals = @()
-    for ($i = 1; $i -lt 4; $i += 2) {
+    # Rozšířeno na více sloupců (až 14 pro 7 intervalů)
+    for ($i = 1; $i -lt $parts.Count; $i += 2) {
         if (-not [string]::IsNullOrWhiteSpace($parts[$i]) -and ($parts[$i] -ne $parts[$i+1])) {
             $end = if ($parts[$i+1] -match "00:00|0:00") { [timespan]"1.00:00:00" } else { [timespan]$parts[$i+1] }
             $intervals += @{ start = [timespan]$parts[$i]; end = $end }
@@ -83,6 +64,7 @@ $finalRows = @()
 
 foreach ($date in $dates) {
     $yyyy = $date.ToString("yyyy"); $mm = $date.ToString("MM"); $dd = $date.ToString("dd")
+    # OTE dává ceny v EUR/MWh
     $url = "https://www.ote-cr.cz/pubweb/attachments/01/$yyyy/month$mm/day$dd/DT_15MIN_${dd}_${mm}_${yyyy}_CZ.xlsx"
     $tmpFile = [System.IO.Path]::GetTempFileName() + ".xlsx"
 
@@ -90,10 +72,13 @@ foreach ($date in $dates) {
         Invoke-WebRequest -Uri $url -OutFile $tmpFile
         $oteData = Import-Excel -Path $tmpFile -NoHeader -StartRow 24 -EndRow 119
         foreach ($row in $oteData) {
-            $cenaSpot = [double]($row.P3 -replace ',', '.')
+            # 1. Cena ze Spotu v EUR/MWh převedená na CZK/kWh
+            $cenaSpotEUR_MWh = [double]($row.P3 -replace ',', '.')
+            $cenaSpotCZK_kWh = ($cenaSpotEUR_MWh * $eurRateNum) / 1000
+            
             for ($m = 0; $m -lt 3; $m++) {
                 $currTime = ([timespan]$row.P2.Split("-")[0].Trim()).Add([timespan]::FromMinutes($m * 5))
-                $dayName = ( [System.Globalization.CultureInfo]::GetCultureInfo("cs-CZ")).DateTimeFormat.GetDayName($date.DayOfWeek).ToLower()
+                $dayName = ([System.Globalization.CultureInfo]::GetCultureInfo("cs-CZ")).DateTimeFormat.GetDayName($date.DayOfWeek).ToLower()
                 
                 $isLow = $false
                 if ($hdoMap.ContainsKey($dayName)) {
@@ -102,17 +87,20 @@ foreach ($date in $dates) {
                     }
                 }
                 
-                $cenaKonecna = if ($isLow) { $cenaSpot + $T2 + $Priplatek } else { $cenaSpot + $T1 + $Priplatek }
-                $divisor = if ($batProc -gt 0) { $batProc } else { 1 }
+                # 2. Převod fixních poplatků z CZK/MWh na CZK/kWh
+                $distribuce_kWh = if ($isLow) { $T2_czk_mwh / 1000 } else { $T1_czk_mwh / 1000 }
+                $priplatek_kWh = $Priplatek_czk_mwh / 1000
+                $srazka_kWh = $srazka_czk_mwh / 1000
+                
+                # Výpočet finální ceny v CZK/kWh
+                $cenaKonecna = $cenaSpotCZK_kWh + $distribuce_kWh + $priplatek_kWh
                 
                 $finalRows += [PSCustomObject]@{
                     Datum = $date.ToString("yyyy-MM-dd")
                     Cas = "{0:hh\:mm}" -f $currTime
-                    Cena_Spot = $cenaSpot
-                    Tarif = if ($isLow) { "NT" } else { "VT" }
+                    # Ukládáme jako CZK/kWh s 2 desinnými místy
                     Cena_Konecna = "{0:N2}" -f $cenaKonecna
-                    Cena_Bat = "{0:N2}" -f ($baterie + ($cenaKonecna / $divisor))
-                    Sell = "{0:N2}" -f ($cenaSpot - $srazka)
+                    Sell = "{0:N2}" -f ($cenaSpotCZK_kWh - $srazka_kWh)
                 }
             }
         }
@@ -121,16 +109,15 @@ foreach ($date in $dates) {
 
 if ($finalRows.Count -gt 0) {
     $finalRows | Export-Csv -Path $outputFile -NoTypeInformation -Delimiter ";" -Encoding UTF8 -Force
-    Write-Host "Export hotov: $outputFile"
+    Write-Host "Export hotov v CZK/kWh: $outputFile"
 }
 
-# --- 3. AUTO-COMMIT (Zápis zpět na GitHub) ---
+# --- 3. AUTO-COMMIT ---
 if ($env:GITHUB_ACTIONS) {
+    git config --global user.name "GitHub Action"
     git config --global user.name "GitHub Action"
     git config --global user.email "action@github.com"
     git add hdo500.csv ceny_final_5min.csv
-    git commit -m "Auto-update: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    git commit -m "Auto-update CZK: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
     git push
-
 }
-
