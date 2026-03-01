@@ -3,67 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ceny Elektřiny - Chalupa</title>
+    <title>Monitor Elektřiny - Chalupa</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; padding: 10px; margin: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; padding: 10px; margin: 0; }
         .container { max-width: 800px; margin: auto; padding-bottom: 50px; }
-        h1 { text-align: center; color: #00e676; font-size: 1.5em; margin: 20px 0; }
+        h1 { text-align: center; color: #00e676; font-size: 1.4em; margin: 15px 0; text-transform: uppercase; letter-spacing: 1px; }
         
-        /* Horní karta s dynamickým časem */
-        .stats { display: flex; justify-content: center; margin-bottom: 20px; }
+        /* Horní karta */
+        .stats { display: flex; justify-content: center; margin-bottom: 15px; }
         .card { 
-            background: #1e1e1e; 
-            padding: 20px; 
-            border-radius: 12px; 
-            text-align: center; 
-            width: 100%; 
-            max-width: 300px; 
-            border: 2px solid #00e676;
-            box-shadow: 0 4px 15px rgba(0, 230, 118, 0.2);
+            background: #1e1e1e; padding: 15px; border-radius: 15px; text-align: center; 
+            width: 100%; max-width: 320px; border: 2px solid #333;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
-        .card h3 { 
-            margin: 0; 
-            color: #00e676; 
-            font-size: 0.9em; 
-            text-transform: uppercase; 
-            letter-spacing: 2px;
-        }
-        .card p { font-size: 2.2em; font-weight: bold; margin: 10px 0 0 0; color: #fff; }
+        .card h3 { margin: 0; font-size: 0.85em; text-transform: uppercase; letter-spacing: 2px; color: #bbb; }
+        .card p { font-size: 2.5em; font-weight: bold; margin: 5px 0; color: #fff; }
+        
+        /* Dynamické barvy pro popisek tarifu v kartě */
+        .status-nt { color: #00e676 !important; font-weight: bold; }
+        .status-vt { color: #ff9800 !important; font-weight: bold; }
 
-        /* Graf: Na PC 40vh, na mobilu 70vh */
+        /* Graf */
         .chart-container {
-            position: relative;
-            background: #1e1e1e;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 30px;
-            border: 1px solid #333;
-            height: 40vh;
+            position: relative; background: #1e1e1e; border-radius: 12px; 
+            padding: 10px; margin-bottom: 20px; border: 1px solid #333; height: 35vh;
         }
-
-        @media (max-width: 600px) {
-            .chart-container { height: 70vh; }
-        }
+        @media (max-width: 600px) { .chart-container { height: 60vh; } }
 
         /* Tabulka */
-        h2 { color: #00e676; font-size: 1.2em; margin-top: 30px; }
-        .table-wrapper { border-radius: 8px; border: 1px solid #333; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; background: #1e1e1e; }
-        th, td { padding: 15px; text-align: center; border-bottom: 1px solid #333; }
-        th { background: #252525; color: #00e676; font-weight: bold; }
-        .current-row { background: rgba(0, 230, 118, 0.2); font-weight: bold; }
+        h2 { color: #aaa; font-size: 1.1em; margin: 20px 0 10px 5px; border-left: 4px solid #00e676; padding-left: 10px; }
+        .table-wrapper { border-radius: 12px; border: 1px solid #333; overflow: hidden; background: #1e1e1e; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 5px; text-align: center; border-bottom: 1px solid #2a2a2a; font-size: 0.95em; }
+        th { background: #252525; color: #00e676; text-transform: uppercase; font-size: 0.8em; }
+        
+        /* Barvy řádků podle tarifu */
+        .nt-text { color: #00e676; font-weight: bold; }
+        .vt-text { color: #ff9800; font-weight: bold; }
+        
+        /* Aktuální řádek */
+        .current-row { background: rgba(255, 255, 255, 0.1) !important; outline: 1px solid #555; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Ceny Elektřiny - Chalupa</h1>
+        <h1>Elektřina Chalupa</h1>
         
         <div class="stats">
-            <div class="card">
+            <div class="card" id="main-card">
                 <h3 id="time-label">ČAS --:--</h3>
-                <p id="curr">-</p>
+                <p id="curr-price">-</p>
+                <div id="tarif-status" style="font-size: 0.9em;">NAČÍTÁM...</div>
             </div>
         </div>
 
@@ -71,13 +63,14 @@
             <canvas id="priceChart"></canvas>
         </div>
 
-        <h2>Předpověď (Konečná cena)</h2>
+        <h2>Předpověď cen (Kč/kWh)</h2>
         <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
                         <th>Čas</th>
-                        <th>Cena [EUR/MWh]</th>
+                        <th>Tarif</th>
+                        <th>Cena</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -88,20 +81,22 @@
     <script>
         let myChart = null;
 
-        function nactiData() {
-            // Přidání časového razítka za URL vynutí stažení nové verze (obejití cache)
+        function updateData() {
+            // Anti-cache parametr v URL
             const csvUrl = './ceny_final_5min.csv?v=' + new Date().getTime();
 
             Papa.parse(csvUrl, {
                 download: true,
                 header: true,
                 delimiter: ";",
+                skipEmptyLines: true,
                 complete: function(results) {
                     const now = new Date();
-                    const allData = results.data.filter(r => r.Datum && r.Cas);
+                    const allData = results.data;
                     
-                    // Filtrace: zobrazit data od teď dál (-5 min rezerva)
+                    // FILTRACE: Pouze budoucí data (+ rezerva 5 min zpět pro aktuální slot)
                     const filteredData = allData.filter(r => {
+                        if (!r.Datum || !r.Cas) return false;
                         const rowTime = new Date(`${r.Datum}T${r.Cas}`);
                         return rowTime >= new Date(now.getTime() - 5 * 60000);
                     });
@@ -109,62 +104,72 @@
                     if (filteredData.length === 0) return;
 
                     const labels = filteredData.map(r => r.Cas);
-                    const konecna = filteredData.map(r => parseFloat(r.Cena_Konecna.replace(',', '.')));
+                    const prices = filteredData.map(r => parseFloat(r.Cena_Konecna.replace(',', '.')));
+                    const current = filteredData[0];
 
-                    // 1. Aktualizace horní karty (Čas platnosti a Cena)
-                    document.getElementById('time-label').innerText = "PLATNOST " + filteredData[0].Cas;
-                    document.getElementById('curr').innerText = konecna[0].toFixed(2) + " €";
+                    // 1. AKTUALIZACE HORNÍ KARTY
+                    document.getElementById('time-label').innerText = "PLATNOST " + current.Cas;
+                    document.getElementById('curr-price').innerText = parseFloat(current.Cena_Konecna.replace(',','.')).toFixed(2) + " Kč";
+                    
+                    const statusEl = document.getElementById('tarif-status');
+                    statusEl.innerText = "TARIF: " + current.Tarif;
+                    
+                    // Barva karty podle tarifu
+                    const card = document.getElementById('main-card');
+                    if (current.Tarif === "NT") {
+                        statusEl.className = "status-nt";
+                        card.style.borderColor = "#00e676";
+                    } else {
+                        statusEl.className = "status-vt";
+                        card.style.borderColor = "#ff9800";
+                    }
 
-                    // 2. Aktualizace tabulky
+                    // 2. AKTUALIZACE TABULKY (Jen budoucnost)
                     const tableBody = document.getElementById('tableBody');
-                    tableBody.innerHTML = ""; // Vyčistit tabulku před překreslením
+                    tableBody.innerHTML = "";
                     
                     filteredData.forEach((r, index) => {
                         const row = document.createElement('tr');
                         if (index === 0) row.className = 'current-row';
-                        row.innerHTML = `<td>${r.Cas}</td><td>${konecna[index].toFixed(2)} €</td>`;
+                        
+                        const tarifClass = r.Tarif === "NT" ? "nt-text" : "vt-text";
+                        const displayPrice = parseFloat(r.Cena_Konecna.replace(',','.')).toFixed(2);
+                        
+                        row.innerHTML = `
+                            <td>${r.Cas}</td>
+                            <td class="${tarifClass}">${r.Tarif}</td>
+                            <td>${displayPrice} Kč</td>
+                        `;
                         tableBody.appendChild(row);
                     });
 
-                    // 3. Vykreslení nebo aktualizace grafu
+                    // 3. AKTUALIZACE GRAFU
                     const ctx = document.getElementById('priceChart').getContext('2d');
-                    
-                    if (myChart) {
-                        myChart.destroy(); // Zničíme starý graf před novým vykreslením
-                    }
+                    if (myChart) myChart.destroy();
 
                     myChart = new Chart(ctx, {
                         type: 'line',
                         data: {
                             labels: labels,
                             datasets: [{
-                                label: 'Konečná cena',
-                                data: konecna,
-                                borderColor: '#00e676',
-                                backgroundColor: 'rgba(0, 230, 118, 0.1)',
+                                label: 'Kč/kWh',
+                                data: prices,
+                                borderColor: current.Tarif === "NT" ? '#00e676' : '#ff9800',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                 borderWidth: 3,
                                 pointRadius: 0,
-                                tension: 0.1,
+                                tension: 0.2,
                                 fill: true
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            interaction: { intersect: false, mode: 'index' },
                             scales: { 
-                                x: { 
-                                    grid: { display: false },
-                                    ticks: { color: '#888', autoSkip: true, maxTicksLimit: 12 }
-                                }, 
-                                y: { 
-                                    grid: { color: '#333' },
-                                    ticks: { color: '#888' }
-                                } 
+                                x: { ticks: { color: '#888', maxTicksLimit: 10 }, grid: { display: false } },
+                                y: { ticks: { color: '#888' }, grid: { color: '#333' } }
                             },
-                            plugins: { 
-                                legend: { display: false } 
-                            }
+                            plugins: { legend: { display: false } }
                         }
                     });
                     console.log("Aktualizováno: " + new Date().toLocaleTimeString());
@@ -172,11 +177,9 @@
             });
         }
 
-        // První spuštění
-        nactiData();
-
-        // Automatické obnovení každých 5 minut (300 000 ms)
-        setInterval(nactiData, 300000);
+        // Spuštění a nastavení intervalu 1 minuta (60 000 ms)
+        updateData();
+        setInterval(updateData, 60000);
     </script>
 </body>
 </html>
