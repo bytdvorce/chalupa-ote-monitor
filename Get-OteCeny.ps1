@@ -112,8 +112,8 @@ foreach ($date in $dates) {
                     Cena_Spot = $cenaSpot
                     Tarif = if ($isLow) { "NT" } else { "VT" }
                     Cena_Konecna = "{0:N2}" -f $cenaKonecna
-#                    Cena_Bat = "{0:N2}" -f ($baterie + ($cenaKonecna / $divisor))
-#                    Sell = "{0:N2}" -f ($cenaSpot - $srazka)
+                    Cena_Bat = "{0:N2}" -f ($baterie + ($cenaKonecna / $divisor))
+                    Sell = "{0:N2}" -f ($cenaSpot - $srazka)
                 }
             }
         }
