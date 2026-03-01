@@ -102,8 +102,7 @@ foreach ($date in $dates) {
                     }
                 }
                 
-                $cenaKonecnaEUR = if ($isLow) { $cenaSpot + $T2 + $Priplatek } else { $cenaSpot + $T1 + $Priplatek }
-                $cenaKonecna = ($cenaKonecnaEUR*$rate)/1000
+                $cenaKonecna = if ($isLow) { $cenaSpot + $T2 + $Priplatek } else { $cenaSpot + $T1 + $Priplatek }
                 $divisor = if ($batProc -gt 0) { $batProc } else { 1 }
                 
                 $finalRows += [PSCustomObject]@{
