@@ -42,7 +42,9 @@
         <h1>Ceny Elektřiny - Chalupa</h1>
         
         <div class="stats">
-            <div class="card"><h3>Aktuální Cena</h3><p id="curr">-</p></div>
+            <div class="card">
+                <h3 id="current-time-label">Čas -:-</h3> <p id="curr">-</p>
+            </div>
         </div>
 
         <div class="chart-container">
@@ -83,7 +85,8 @@
 
                 const labels = filteredData.map(r => r.Cas);
                 const konecna = filteredData.map(r => parseFloat(r.Cena_Konecna.replace(',', '.')));
-
+                
+                document.getElementById('current-time-label').innerText = "PLATNOST: " + filteredData[0].Cas;
                 document.getElementById('curr').innerText = konecna[0].toFixed(2) + " €";
 
                 const tableBody = document.getElementById('tableBody');
