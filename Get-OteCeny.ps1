@@ -82,6 +82,7 @@ foreach ($line in $rawHdo[1..7]) {
 $dates = @((Get-Date), (Get-Date).AddDays(1))
 $finalRows = @()
 
+# --- 3. NAČTENÍ DAT Z OTE A VÝPOČET (OPRAVENO NA HODINOVÉ ÚDAJE) ---
 foreach ($date in $dates) {
     $yyyy = $date.ToString("yyyy"); $mm = $date.ToString("MM"); $dd = $date.ToString("dd")
     $url = "https://www.ote-cr.cz/pubweb/attachments/01/$yyyy/month$mm/day$dd/DT_15MIN_${dd}_${mm}_${yyyy}_CZ.xlsx"
@@ -89,36 +90,49 @@ foreach ($date in $dates) {
 
     try {
         Invoke-WebRequest -Uri $url -OutFile $tmpFile
+        # Načítáme data z OTE (předpoklad: řádky 24-119 obsahují 15min intervaly)
+        # Pro hodinové údaje budeme brát vždy jen první 15min interval každé hodiny
         $oteData = Import-Excel -Path $tmpFile -NoHeader -StartRow 24 -EndRow 119
-        foreach ($row in $oteData) {
+        
+        # Filtrujeme pouze celé hodiny (indexy 0, 4, 8... nebo časy končící :00)
+        for ($i = 0; $i -lt $oteData.Count; $i += 4) {
+            $row = $oteData[$i]
             $cenaSpot = [double]($row.P3 -replace ',', '.')
-            for ($m = 0; $m -lt 3; $m++) {
-                $currTime = ([timespan]$row.P2.Split("-")[0].Trim()).Add([timespan]::FromMinutes($m * 60))
-                $dayName = ( [System.Globalization.CultureInfo]::GetCultureInfo("cs-CZ")).DateTimeFormat.GetDayName($date.DayOfWeek).ToLower()
-                
-                $isLow = $false
-                if ($hdoMap.ContainsKey($dayName)) {
-                    foreach ($int in $hdoMap[$dayName]) {
-                        if ($currTime -ge $int.start -and $currTime -lt $int.end) { $isLow = $true; break }
+            
+            # Získání času začátku intervalu (očekávaný formát z OTE např. "00:00 - 01:00")
+            $startTimeStr = $row.P2.Split("-")[0].Trim()
+            $currTime = [timespan]$startTimeStr
+            
+            $dayName = ([System.Globalization.CultureInfo]::GetCultureInfo("cs-CZ")).DateTimeFormat.GetDayName($date.DayOfWeek).ToLower()
+            
+            # Logika HDO
+            $isLow = $false
+            if ($hdoMap.ContainsKey($dayName)) {
+                foreach ($int in $hdoMap[$dayName]) {
+                    if ($currTime -ge $int.start -and $currTime -lt $int.end) { 
+                        $isLow = $true
+                        break 
                     }
                 }
-                
-                $cenaKonecna = if ($isLow) { $fix + $T2 } else { $fix + $T1 }
-                $divisor = if ($batProc -gt 0) { $batProc } else { 1 }
-                
-                $finalRows += [PSCustomObject]@{
-                    Datum = $date.ToString("yyyy-MM-dd")
-                    Cas = "{0:hh\:mm}" -f $currTime
-                    Cena_Spot = $cenaSpot
-                    Tarif = if ($isLow) { "NT" } else { "VT" }
-                    Cena_Konecna = "{0:N2}" -f ($cenaKonecna * 1.21) # navyseno o DPH
-#                    Cena_Bat = "{0:N2}" -f ($baterie + ($cenaKonecna / $divisor))
-#                    Sell = "{0:N2}" -f ($cenaSpot - $srazka)
-                }
+            }
+            
+            $cenaKonecna = if ($isLow) { $fix + $T2 } else { $fix + $T1 }
+            
+            $finalRows += [PSCustomObject]@{
+                Datum        = $date.ToString("yyyy-MM-dd")
+                Cas          = "{0:hh\:mm}" -f $currTime
+                Cena_Spot    = $cenaSpot
+                Tarif        = if ($isLow) { "NT" } else { "VT" }
+                Cena_Konecna = "{0:N2}" -f ($cenaKonecna * 1.21) # Včetně DPH
             }
         }
-    } catch {} finally { if (Test-Path $tmpFile) { Remove-Item $tmpFile } }
+    } catch {
+        Write-Host "Data pro den $($date.ToShortDateString()) nebyla nalezena nebo nastala chyba." -ForegroundColor Gray
+    } finally { 
+        if (Test-Path $tmpFile) { Remove-Item $tmpFile } 
+    }
 }
+
 
 if ($finalRows.Count -gt 0) {
     $finalRows | Export-Csv -Path $outputFile -NoTypeInformation -Delimiter ";" -Encoding UTF8 -Force
