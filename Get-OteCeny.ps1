@@ -1,5 +1,6 @@
 # Nastavení kódování
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+if (-not (Get-Module -ListAvailable ImportExcel)) { Install-Module ImportExcel -Force -Scope CurrentUser }
 
 # Cesta k souboru (univerzální pro GitHub i PC)
 $hdoFile = Join-Path $PSScriptRoot "hdo500.csv"
@@ -68,7 +69,7 @@ $fix = Get-HdoValue 20
 
 # --- 2. NAČTENÍ HDO MAPY (Všech 3 intervalů) ---
 $hdoMap = @{}
-$hdoConfig = Import-Excel -Path $hdoPath -NoHeader -StartRow 1 -EndRow 7
+$hdoConfig = Import-Excel -Path $hdoFile -NoHeader -StartRow 1 -EndRow 7
 foreach ($row in $hdoConfig) {
     $dayName = $row.P1.Trim().ToLower()
     $intervals = @()
@@ -85,6 +86,7 @@ foreach ($row in $hdoConfig) {
 
 # --- 3. STAŽENÍ OTE A HODINOVÝ VÝPOČET ---
 $finalRows = @()
+$dates = @((Get-Date), (Get-Date).AddDays(1))
 foreach ($date in $dates) {
     $yyyy = $date.ToString("yyyy"); $mm = $date.ToString("MM"); $dd = $date.ToString("dd")
     $url = "https://www.ote-cr.cz/pubweb/attachments/01/$yyyy/month$mm/day$dd/DT_15MIN_${dd}_${mm}_${yyyy}_CZ.xlsx"
