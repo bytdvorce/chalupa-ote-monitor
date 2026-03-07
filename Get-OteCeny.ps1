@@ -67,15 +67,29 @@ $srazka = Get-HdoValue 15
 $fix = Get-HdoValue 20
 
 $hdoMap = @{}
+# Procházíme řádky 1 až 7 (pondělí až neděle)
 foreach ($line in $rawHdo[1..7]) {
     $parts = $line -split ';'
+    if ($parts.Count -lt 7) { continue } # Přeskočit neúplné řádky
+
     $intervals = @()
-    for ($i = 1; $i -lt 6; $i += 2) {
-        if (-not [string]::IsNullOrWhiteSpace($parts[$i]) -and ($parts[$i] -ne $parts[$i+1])) {
-            $end = if ($parts[$i+1] -match "00:00|0:00") { [timespan]"1.00:00:00" } else { [timespan]$parts[$i+1] }
-            $intervals += @{ start = [timespan]$parts[$i]; end = $end }
+    # Procházíme 3 dvojice (zapnout/vypnout): indexy 1+2, 3+4, 5+6
+    for ($i = 1; $i -le 5; $i += 2) {
+        $startStr = $parts[$i].Trim()
+        $endStr = $parts[$i+1].Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($startStr) -and -not [string]::IsNullOrWhiteSpace($endStr)) {
+            $start = [timespan]$startStr
+            # KLÍČOVÁ OPRAVA: Pokud je konec 00:00, nastavíme ho na 24:00 (1 den)
+            $end = if ($endStr -match "^00:00$|^0:00$") { [timespan]"1.00:00:00" } else { [timespan]$endStr }
+
+            # Přidat pouze pokud je interval platný (start < konec)
+            if ($start -lt $end) {
+                $intervals += @{ start = $start; end = $end }
+            }
         }
     }
+    # Uložíme pod malými písmeny (pondělí, úterý...)
     $hdoMap[$parts[0].ToLower().Trim()] = $intervals
 }
 
