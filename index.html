@@ -98,7 +98,7 @@
                     const filteredData = allData.filter(r => {
                         if (!r.Datum || !r.Cas) return false;
                         const rowTime = new Date(`${r.Datum}T${r.Cas}`);
-                        return rowTime >= new Date(now.getTime() - 5 * 60000);
+                        return rowTime >= new Date(now.getTime() - 60 * 60000);
                     });
 
                     if (filteredData.length === 0) return;
