@@ -58,18 +58,19 @@ function Get-HdoValue($lineIndex) {
     return 0
 }
 
-$T1 = Get-HdoValue 10
-$T2 = Get-HdoValue 11
+$T1 = Get-HdoValue 21
+$T2 = Get-HdoValue 22
 $baterie = Get-HdoValue 12
 $batProc = Get-HdoValue 13
 $Priplatek = Get-HdoValue 14
 $srazka = Get-HdoValue 15
+$fix = Get-HdoValue 20
 
 $hdoMap = @{}
 foreach ($line in $rawHdo[1..7]) {
     $parts = $line -split ';'
     $intervals = @()
-    for ($i = 1; $i -lt 4; $i += 2) {
+    for ($i = 1; $i -lt 6; $i += 2) {
         if (-not [string]::IsNullOrWhiteSpace($parts[$i]) -and ($parts[$i] -ne $parts[$i+1])) {
             $end = if ($parts[$i+1] -match "00:00|0:00") { [timespan]"1.00:00:00" } else { [timespan]$parts[$i+1] }
             $intervals += @{ start = [timespan]$parts[$i]; end = $end }
@@ -92,7 +93,7 @@ foreach ($date in $dates) {
         foreach ($row in $oteData) {
             $cenaSpot = [double]($row.P3 -replace ',', '.')
             for ($m = 0; $m -lt 3; $m++) {
-                $currTime = ([timespan]$row.P2.Split("-")[0].Trim()).Add([timespan]::FromMinutes($m * 5))
+                $currTime = ([timespan]$row.P2.Split("-")[0].Trim()).Add([timespan]::FromMinutes($m * 60))
                 $dayName = ( [System.Globalization.CultureInfo]::GetCultureInfo("cs-CZ")).DateTimeFormat.GetDayName($date.DayOfWeek).ToLower()
                 
                 $isLow = $false
@@ -102,8 +103,7 @@ foreach ($date in $dates) {
                     }
                 }
                 
-                $cenaKonecnaEUR = if ($isLow) { $cenaSpot + $T2 + $Priplatek } else { $cenaSpot + $T1 + $Priplatek }
-                $cenaKonecna = ($cenaKonecnaEUR * $eurRateNum) / 1000
+                $cenaKonecna = if ($isLow) { $fix + $T2 } else { $fix + $T1 }
                 $divisor = if ($batProc -gt 0) { $batProc } else { 1 }
                 
                 $finalRows += [PSCustomObject]@{
